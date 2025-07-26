@@ -468,9 +468,11 @@ def search_sse():
                 if json_dict:
                     try:
                         if 'contents' in json_dict and 'twoColumnWatchNextResults' in json_dict['contents']:
-                            secondary_results_section = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {})
-                            if secondary_results_section:
-                                secondary_results = secondary_results_section.get('secondaryResults', {}).get('results', [])
+                            #secondary_results_section = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {})
+                            #if secondary_results_section:
+                            #    secondary_results = secondary_results_section.get('secondaryResults', {}).get('results', [])
+                                # 修正: secondaryResults は twoColumnWatchNextResults の直下
+                                secondary_results = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {}).get('results', [])
                                 added_related_count = 0
                                 for result in secondary_results:
                                     if 'compactVideoRenderer' in result:
