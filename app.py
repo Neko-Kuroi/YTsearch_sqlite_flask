@@ -469,7 +469,7 @@ def scrape_video_details(video_id, base_url='https://www.youtube.com/watch?v='):
     # --- ここに Streamlit の for ループ内のスクレイピングロジックを移植 ---
     # (簡略化した例です。実際にはもっと多くの情報を抽出します)
     try:
-        time.sleep(1.5) # リクエスト間隔を空ける
+        time.sleep(0.5) # リクエスト間隔を空ける
         # setup_requests() で設定された opener を使用
         response = urllib.request.urlopen(target_url, timeout=60)
         if response.getcode() != 200:
