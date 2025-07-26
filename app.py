@@ -328,10 +328,21 @@ def clear_session():
 @app.teardown_appcontext
 def cleanup_session(error):
     """Clean up session files when app context tears down"""
-    if 'session_id' in session:
-        temp_dir = f"removefolder/{session['session_id']}"
-        # Note: In production, you might want to implement a more sophisticated cleanup strategy
-        pass
+    # No direct access to `session` here.
+    # If you had session-related data that you absolutely needed to clean up
+    # in teardown, you'd typically have stored it in app.g or a passed argument
+    # from the request context earlier.
+    # For file system cleanup, a background task or explicit user action is better.
+    logging.info(f"App context tearing down. Error: {error}")
+    pass # As per your original code, it does nothing here anyway
+
+#@app.teardown_appcontext
+#def cleanup_session(error):
+#    """Clean up session files when app context tears down"""
+#    if 'session_id' in session:
+#        temp_dir = f"removefolder/{session['session_id']}"
+#        # Note: In production, you might want to implement a more sophisticated cleanup strategy
+#        pass
 
 if __name__ == '__main__':
     # Ensure removefolder directory exists
