@@ -23,7 +23,7 @@ app.secret_key = secrets.token_urlsafe(32)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# HTML template as string
+# HTML template as string (以前の詳細なUIバージョンを使用)
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="ja">
@@ -191,66 +191,121 @@ HTML_TEMPLATE = '''
     </div>
     <script>
         let searchInProgress = false;
+        let eventSource = null; // SSE 接続を管理する変数
+
         function showStatus(message, type = 'info') {
             const status = document.getElementById('status');
             status.textContent = message;
             status.className = `status ${type}`;
             status.style.display = 'block';
         }
+
         function hideStatus() {
             document.getElementById('status').style.display = 'none';
         }
+
+        // --- 新規関数: 進捗情報を表示する ---
         function updateProgress(message) {
-            document.getElementById('progressInfo').textContent = message;
+            const progressInfo = document.getElementById('progressInfo');
+            if (progressInfo) {
+                progressInfo.textContent = message; // 進捗メッセージを更新
+            }
         }
+
+        // --- 新規関数: ローディング表示を開始 ---
+        function startLoading() {
+            document.getElementById('loading').style.display = 'block';
+            updateProgress('検索を開始しています...'); // 初期メッセージ
+        }
+
+        // --- 新規関数: ローディング表示を終了 ---
+        function stopLoading() {
+            document.getElementById('loading').style.display = 'none';
+            updateProgress(''); // 進捗メッセージをクリア
+        }
+
+
         function startSearch() {
             const keywords = document.getElementById('keywords').value.trim();
             if (!keywords) {
                 showStatus('検索キーワードを入力してください。', 'error');
                 return;
             }
+
             searchInProgress = true;
             document.getElementById('searchBtn').disabled = true;
             document.getElementById('cancelBtn').style.display = 'inline-block';
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('results').innerHTML = '';
-            document.getElementById('downloadSection').style.display = 'none';
+            document.getElementById('results').innerHTML = ''; // 結果をクリア
+            document.getElementById('downloadSection').style.display = 'none'; // ダウンロードボタンを隠す
             hideStatus();
-            updateProgress('検索を開始しています...');
-            
-            fetch('/search', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ keywords: keywords })
-            })
-            .then(response => response.json())
-            .then(data => {
+
+            // --- 変更: SSE を使用して検索を開始 ---
+            // 既存の接続があれば閉じる
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            // 進捗表示を開始
+            startLoading();
+
+            // SSE エンドポイントに接続 (keywords をクエリパラメータとして渡す)
+            eventSource = new EventSource(`/search_sse?keywords=${encodeURIComponent(keywords)}`);
+
+            let finalResults = []; // 最終結果を蓄積
+
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.type === 'progress') {
+                    // 進捗メッセージを更新
+                    updateProgress(data.message);
+                } else if (data.type === 'result') {
+                    // 途中結果を追加 (オプション: 画面に逐次表示)
+                    // displayResults([data.result], true); // true は追加モードの想定
+                    // または、最終結果用の配列に蓄積
+                    finalResults.push(data.result);
+                } else if (data.type === 'done') {
+                    // 検索完了
+                    searchInProgress = false;
+                    document.getElementById('searchBtn').disabled = false;
+                    document.getElementById('cancelBtn').style.display = 'none';
+                    stopLoading(); // ローディング表示終了
+                    eventSource.close(); // SSE 接続を閉じる
+
+                    // 最終結果を表示
+                    displayResults(finalResults);
+                    showStatus(`検索完了! ${data.total_results} 件の動画が見つかりました。`, 'success');
+                    if (data.total_results > 0) {
+                        document.getElementById('downloadSection').style.display = 'block';
+                    }
+                } else if (data.type === 'error') {
+                    // エラー発生
+                    searchInProgress = false;
+                    document.getElementById('searchBtn').disabled = false;
+                    document.getElementById('cancelBtn').style.display = 'none';
+                    stopLoading();
+                    eventSource.close();
+                    showStatus(data.message, 'error');
+                }
+            };
+
+            eventSource.onerror = function(err) {
+                console.error("EventSource failed:", err);
                 searchInProgress = false;
                 document.getElementById('searchBtn').disabled = false;
                 document.getElementById('cancelBtn').style.display = 'none';
-                document.getElementById('loading').style.display = 'none';
-                if (data.error) {
-                    showStatus(data.error, 'error');
-                    return;
+                stopLoading();
+                if (eventSource.readyState === EventSource.CLOSED) {
+                     showStatus('検索が中断されました。', 'error');
+                } else {
+                     showStatus('検索中にエラーが発生しました。', 'error');
                 }
-                displayResults(data.results);
-                showStatus(`検索完了! ${data.total_results} 件の動画が見つかりました。`, 'success');
-                if (data.total_results > 0) {
-                    document.getElementById('downloadSection').style.display = 'block';
-                }
-            })
-            .catch(error => {
-                searchInProgress = false;
-                document.getElementById('searchBtn').disabled = false;
-                document.getElementById('cancelBtn').style.display = 'none';
-                document.getElementById('loading').style.display = 'none';
-                showStatus('検索中にエラーが発生しました: ' + error.message, 'error');
-            });
+                eventSource.close();
+            };
         }
+
         function cancelSearch() {
             if (searchInProgress) {
+                // サーバーにキャンセル要求を送信
                 fetch('/clear_session', {
                     method: 'POST',
                     headers: {
@@ -258,38 +313,68 @@ HTML_TEMPLATE = '''
                     }
                 })
                 .then(() => {
-                    location.reload();
+                    // クライアント側の処理もキャンセル
+                    searchInProgress = false;
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                    document.getElementById('searchBtn').disabled = false;
+                    document.getElementById('cancelBtn').style.display = 'none';
+                    stopLoading();
+                    showStatus('検索がキャンセルされました。', 'info');
                 })
                 .catch(error => {
                     console.error('Cancel error:', error);
-                    location.reload(); // エラー時もリロード
+                    // エラー時もUIをリセット
+                    searchInProgress = false;
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                    document.getElementById('searchBtn').disabled = false;
+                    document.getElementById('cancelBtn').style.display = 'none';
+                    stopLoading();
+                    showStatus('キャンセル処理中にエラーが発生しました。', 'error');
                 });
             }
         }
-        function displayResults(results) {
+
+        // displayResults 関数を少し修正して、追加モードに対応 (オプション)
+        function displayResults(results, append = false) {
             const resultsDiv = document.getElementById('results');
-            if (results.length === 0) {
+            if (!append) {
+                resultsDiv.innerHTML = ''; // 新規表示の場合はクリア
+            }
+            if (results.length === 0 && !append) { // 新規表示で結果が空の場合
                 resultsDiv.innerHTML = '<p>結果が見つかりませんでした。</p>';
                 return;
             }
-            let html = `<h2>検索結果 (${results.length} 件)</h2>`;
-            results.forEach((result, index) => {
-                html += `
-                    <div class="result-item">
-                        <div class="result-title">
-                            <a href="${result.url}" target="_blank">${escapeHtml(result.title)}</a>
+            if (append) {
+                 // 追加モードの場合は、既存の内容に追加
+                 // (この例では最終結果のみを一度に表示するので、append は使わない)
+            } else {
+                // 新規表示モード
+                let html = `<h2>検索結果 (${results.length} 件)</h2>`;
+                results.forEach((result, index) => {
+                    html += `
+                        <div class="result-item">
+                            <div class="result-title">
+                                <a href="${result.url}" target="_blank">${escapeHtml(result.title)}</a>
+                            </div>
+                            <div class="result-meta">
+                                📅 ${escapeHtml(result.date)} | 👁️ ${escapeHtml(result.view_count)}
+                            </div>
+                            <div class="result-channel">
+                                チャンネル: <a href="${result.channel_url}" target="_blank">${escapeHtml(result.channel_name)}</a>
+                            </div>
                         </div>
-                        <div class="result-meta">
-                            📅 ${escapeHtml(result.date)} | 👁️ ${escapeHtml(result.view_count)}
-                        </div>
-                        <div class="result-channel">
-                            チャンネル: <a href="${result.channel_url}" target="_blank">${escapeHtml(result.channel_name)}</a>
-                        </div>
-                    </div>
-                `;
-            });
-            resultsDiv.innerHTML = html;
+                    `;
+                });
+                resultsDiv.innerHTML = html;
+            }
         }
+
         function escapeHtml(text) {
             if (typeof text !== 'string') return text;
             const map = {
@@ -301,6 +386,7 @@ HTML_TEMPLATE = '''
             };
             return text.replace(/[&<>"']/g, function(m) { return map[m]; });
         }
+
         function downloadFile(fileType) {
             // より安全なダウンロード方法 (fetch を使用)
             fetch(`/download/${fileType}`)
@@ -335,6 +421,7 @@ HTML_TEMPLATE = '''
                     alert('ダウンロードに失敗しました: ' + error.message);
                 });
         }
+
         document.getElementById('keywords').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 startSearch();
@@ -469,9 +556,9 @@ def scrape_video_details(video_id, base_url='https://www.youtube.com/watch?v='):
     # --- ここに Streamlit の for ループ内のスクレイピングロジックを移植 ---
     # (簡略化した例です。実際にはもっと多くの情報を抽出します)
     try:
-        time.sleep(0.5) # リクエスト間隔を空ける
+        time.sleep(2) # リクエスト間隔を空ける (2秒に変更)
         # setup_requests() で設定された opener を使用
-        response = urllib.request.urlopen(target_url, timeout=60)
+        response = urllib.request.urlopen(target_url, timeout=15) # タイムアウトを15秒に延長
         if response.getcode() != 200:
              logging.warning(f"Failed to fetch {target_url}, status code: {response.getcode()}")
              return None
@@ -617,232 +704,281 @@ def index():
         logging.error(f"Error in index route: {e}")
         return f"<h1>YouTube Search</h1><p>Error: {str(e)}</p>", 500
 
-@app.route('/search', methods=['POST'])
-def search():
-    try:
-        setup_requests() # urllib の設定
-        keywords_input = request.json.get('keywords', '').strip()
-        if not keywords_input:
-            return jsonify({'error': 'Keywords are required'}), 400
+# --- 新しい SSE ルートを追加 ---
+import json
 
-        # セッションと一時ディレクトリの設定
-        if 'session_id' not in session:
-            session['session_id'] = secrets.token_urlsafe()
-        temp_dir = f"removefolder/{session['session_id']}"
-        my_makedirs(temp_dir)
+@app.route('/search_sse')
+def search_sse():
+    from flask import Response, stream_with_context
+    import datetime # 必要に応じてインポート
 
-        # データベースセッションの取得
-        db_session = get_session_db(temp_dir)
-
-        # Streamlit と同様にキーワードを処理
-        words_list = keywords_input.split()
-        words_joined = "+".join(words_list)
-        KEYWORDS_QUOTED = urllib.parse.quote(words_joined)
-        # ファイル名用のキーワード整形 (Streamlit から移植)
-        words_for_filename = re.sub(r"\+|\s+|\/|\\","_", words_joined)
-
-        logging.info(f"Searching YouTube for: {KEYWORDS_QUOTED}")
-
-        # --- フィルタリング用正規表現の定義 (Streamlit から移植) ---
-        strings = ""
-        strings2 = ""
-        for word in words_list:
-            strings += '(?=.*' + word + ')'
-            strings2 += word + '|'
-        strings2 = strings2.rstrip('|')
-        strings = strings + ".*$" # 全てのキーワードを含む
-        # NG ワードフィルター
-        r_strings_NG = re.compile(r"\#shorts|ひろゆき|ホリエモン|堀江貴文|武田邦彦", flags=re.IGNORECASE)
-        # キーワードフィルター (AND 検索)
-        r_strings = re.compile(strings, flags=re.IGNORECASE)
-        # キーワードフィルター (OR 検索 - Streamlit の主要な使用箇所)
-        r_strings2 = re.compile(strings2, flags=re.IGNORECASE)
-        # ログ出力
-        logging.info(f"Filter regex - AND: {strings}, OR: {strings2}")
-
-        # first_access を呼び出して初期データを取得
-        videoIds_initial = []
-        channel_names_initial = []
-        if KEYWORDS_QUOTED:
-            # リトライロジック
-            for attempt in range(3):
-                 videoIds_initial, channel_names_initial = first_access(KEYWORDS_QUOTED)
-                 if videoIds_initial:
-                     logging.info(f"Successfully fetched {len(videoIds_initial)} initial video IDs.")
-                     break
-                 else:
-                     logging.warning(f"Attempt {attempt + 1} failed to fetch initial video IDs. Retrying...")
-                     time.sleep(2)
-
-        # 重複排除 (Streamlit の dict.fromkeys を使用)
-        videoIds_unique = list(dict.fromkeys(videoIds_initial))
-        # 初期の ID とチャンネル名のペアを辞書化
-        ids_channels_dict = dict(zip(videoIds_initial, channel_names_initial))
-
-        # --- 検索とフィルタリングのメインループ ---
-        all_videoIds = videoIds_unique[:] # 処理対象のIDリスト (初期リストで初期化)
-        visited_urls = set() # 訪問済みURLを記録 (効率化のため set を使用)
-        filtered_results = [] # フィルタリングされた結果を格納
-        items_to_save = [] # DB保存用 Item オブジェクトリスト
-        BASEURL = 'https://www.youtube.com/watch?v='
-
-        # --- ループ制御のための定数 ---
-        MAX_VIDEOS_TO_PROCESS = 100 # 処理する動画の最大数
-        processed_count = 0 # 処理済みカウンター
-
-        # 各動画IDを処理 (while ループ)
-        index = 0
-        while index < len(all_videoIds) and processed_count < MAX_VIDEOS_TO_PROCESS:
-            video_id = all_videoIds[index]
-            index += 1
-            processed_count += 1 # カウンターをインクリメント
-
-            target_url = BASEURL + video_id
-            if target_url in visited_urls:
-                continue
-            visited_urls.add(target_url)
-
-            logging.info(f"Processing video {processed_count}/{MAX_VIDEOS_TO_PROCESS} (List index {index-1}/{len(all_videoIds)}): {video_id}")
-
-            # 個別動画ページから詳細情報を取得
-            video_details = scrape_video_details(video_id)
-            if not video_details:
-                continue # 取得失敗時はスキップ
-
-            # --- フィルタリング ---
-            temp_channel_name = video_details.get('channel_name', '')
-            temp_title = video_details.get('title', '')
-            temp_super_title = video_details.get('super_title', '') # scrape_video_details で取得
-            temp_description = video_details.get('description', '')
-
-            if re.search(r_strings_NG, temp_channel_name) or re.search(r_strings_NG, temp_title):
-                logging.info(f"NG word found in channel ({temp_channel_name}) or title ({temp_title}) for video {video_id}. Skipping.")
-                continue
-
-            check = False
-            if re.search(r_strings2, temp_title) or re.search(r_strings2, temp_super_title) or re.search(r_strings2, temp_description):
-                 check = True
-                 logging.info(f"Keyword match found for video {video_id}.")
-            # else: # AND条件もチェックする場合 (オプション)
-            #     if re.search(r_strings, temp_title) or re.search(r_strings, temp_super_title) or re.search(r_strings, temp_description):
-            #         check = True
-            #         logging.info(f"AND Keyword match found for video {video_id}.")
-
-            if not check:
-                logging.info(f"No keyword match for video {video_id}. Skipping.")
-                continue # 条件に合わなければスキップ
-
-            # --- 条件に合致した場合の処理 ---
-            # 結果リストに追加
-            filtered_results.append(video_details)
-
-            # SQLAlchemy Item オブジェクトを作成して保存リストに追加
-            item = Item()
-            item.title_name = video_details.get('title', '')
-            item.video_id = video_details.get('video_url', '')
-            item.channel_id = video_details.get('channel_url', '')
-            item.date_time = video_details.get('date_text', '') # 文字列を保存
-            item.view_counter = video_details.get('view_count', '')
-            item.channel_name = video_details.get('channel_name', '')
-            items_to_save.append(item)
-
-            # --- 関連動画の収集 ---
-            json_dict = video_details.get('raw_json_dict') # scrape_video_details から取得
-            if json_dict:
-                try:
-                    # Streamlit のロジックと同様に関連動画を取得
-                    if 'contents' in json_dict and 'twoColumnWatchNextResults' in json_dict['contents']:
-                        secondary_results_section = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {})
-                        if secondary_results_section:
-                            secondary_results = secondary_results_section.get('secondaryResults', {}).get('results', [])
-                            for result in secondary_results:
-                                if 'compactVideoRenderer' in result:
-                                    related_video_id = result['compactVideoRenderer'].get('videoId')
-                                    if related_video_id:
-                                        related_video_url = BASEURL + related_video_id
-                                        # 新しい動画IDで、かつ訪問済みでも処理待ちでもない場合に追加
-                                        if related_video_id not in all_videoIds and related_video_url not in visited_urls:
-                                             all_videoIds.append(related_video_id)
-                                             logging.debug(f"Added related video ID: {related_video_id}")
-                                             # リストが長くなりすぎないように制限 (オプション)
-                                             if len(all_videoIds) > MAX_VIDEOS_TO_PROCESS * 2:
-                                                 logging.warning("Related video list is very long, trimming.")
-                                                 all_videoIds = all_videoIds[:MAX_VIDEOS_TO_PROCESS * 2]
-                                                 break # これ以上追加しない
-
-                except (KeyError, IndexError, TypeError) as e:
-                    logging.error(f"Error extracting related videos for {video_id}: {e}")
-
-        # --- 結果のソート ---
+    def generate():
         try:
-            filtered_results.sort(key=lambda x: parse_date_for_sorting(x.get('date_text', '')), reverse=True)
-            logging.info("Results sorted by date (newest first).")
-        except Exception as e:
-            logging.error(f"Error sorting results: {e}")
+            setup_requests()
+            keywords_input = request.args.get('keywords', '').strip()
+            if not keywords_input:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'キーワードがありません。'})}\n\n"
+                return
 
-        # --- データベースに保存 ---
-        if items_to_save:
+            # セッションと一時ディレクトリの設定
+            if 'session_id' not in session:
+                session['session_id'] = secrets.token_urlsafe()
+            temp_dir = f"removefolder/{session['session_id']}"
+            my_makedirs(temp_dir)
+
+            # データベースセッションの取得
+            db_session = get_session_db(temp_dir)
+
+            # Streamlit と同様にキーワードを処理
+            words_list = keywords_input.split()
+            words_joined = "+".join(words_list)
+            KEYWORDS_QUOTED = urllib.parse.quote(words_joined)
+            # ファイル名用のキーワード整形 (Streamlit から移植)
+            words_for_filename = re.sub(r"\+|\s+|\/|\\","_", words_joined)
+
+            logging.info(f"[SSE] Searching YouTube for: {KEYWORDS_QUOTED}")
+            yield f"data: {json.dumps({'type': 'progress', 'message': f'キーワードを処理中: {keywords_input}'})}\n\n"
+
+            # --- フィルタリング用正規表現の定義 (Streamlit から移植) ---
+            strings = ""
+            strings2 = ""
+            for word in words_list:
+                strings += '(?=.*' + word + ')'
+                strings2 += word + '|'
+            strings2 = strings2.rstrip('|')
+            strings = strings + ".*$" # 全てのキーワードを含む
+            # NG ワードフィルター
+            r_strings_NG = re.compile(r"\#shorts|ひろゆき|ホリエモン|堀江貴文|武田邦彦", flags=re.IGNORECASE)
+            # キーワードフィルター (AND 検索)
+            r_strings = re.compile(strings, flags=re.IGNORECASE)
+            # キーワードフィルター (OR 検索 - Streamlit の主要な使用箇所)
+            r_strings2 = re.compile(strings2, flags=re.IGNORECASE)
+            logging.info(f"[SSE] Filter regex - AND: {strings}, OR: {strings2}")
+            yield f"data: {json.dumps({'type': 'progress', 'message': 'フィルタ条件を設定しました。'})}\n\n"
+
+            # first_access を呼び出して初期データを取得
+            videoIds_initial = []
+            channel_names_initial = []
+            if KEYWORDS_QUOTED:
+                yield f"data: {json.dumps({'type': 'progress', 'message': '初期検索を実行中...'})}\n\n"
+                for attempt in range(3):
+                     videoIds_initial, channel_names_initial = first_access(KEYWORDS_QUOTED)
+                     if videoIds_initial:
+                         logging.info(f"[SSE] Successfully fetched {len(videoIds_initial)} initial video IDs.")
+                         yield f"data: {json.dumps({'type': 'progress', 'message': f'初期検索完了: {len(videoIds_initial)} 件の動画候補'})}\n\n"
+                         break
+                     else:
+                         logging.warning(f"[SSE] Attempt {attempt + 1} failed to fetch initial video IDs. Retrying...")
+                         yield f"data: {json.dumps({'type': 'progress', 'message': f'初期検索リトライ中... ({attempt + 1}/3)'})}\n\n"
+                         time.sleep(2)
+
+            if not videoIds_initial:
+                 yield f"data: {json.dumps({'type': 'error', 'message': '初期検索に失敗しました。'})}\n\n"
+                 db_session.close()
+                 return
+
+            # 重複排除 (Streamlit の dict.fromkeys を使用)
+            videoIds_unique = list(dict.fromkeys(videoIds_initial))
+            ids_channels_dict = dict(zip(videoIds_initial, channel_names_initial))
+
+            # --- 検索とフィルタリングのメインループ ---
+            all_videoIds = videoIds_unique[:] # 初期リストで初期化
+            visited_urls = set()
+            filtered_results = []
+            items_to_save = []
+            BASEURL = 'https://www.youtube.com/watch?v='
+
+            # --- 重要: 処理する動画数の上限を引き上げ ---
+            MAX_VIDEOS_TO_PROCESS = 100 # 例として100に増やす
+            processed_count = 0
+            index = 0
+            total_ids_to_process = len(all_videoIds) # 初期リストの長さ
+
+            yield f"data: {json.dumps({'type': 'progress', 'message': f'詳細情報取得を開始します。対象動画数: {total_ids_to_process}'})}\n\n"
+
+            while index < len(all_videoIds) and processed_count < MAX_VIDEOS_TO_PROCESS:
+                video_id = all_videoIds[index]
+                index += 1
+                processed_count += 1
+
+                # 進捗表示 (例: 10件ごと、または最後)
+                if processed_count % 10 == 1 or index >= len(all_videoIds) or processed_count >= MAX_VIDEOS_TO_PROCESS:
+                     yield f"data: {json.dumps({'type': 'progress', 'message': f'動画情報を取得中... ({processed_count}/{min(total_ids_to_process, MAX_VIDEOS_TO_PROCESS)}) ID: {video_id}'})}\n\n"
+
+                target_url = BASEURL + video_id
+                if target_url in visited_urls:
+                    # yield f"data: {json.dumps({'type': 'progress', 'message': f'スキップ (既に訪問済み): {video_id}'})}\n\n" # 多すぎると煩雑
+                    continue
+                visited_urls.add(target_url)
+
+                logging.info(f"[SSE] Processing video {processed_count}/{MAX_VIDEOS_TO_PROCESS} (List index {index-1}/{len(all_videoIds)}): {video_id}")
+
+                # 個別動画ページから詳細情報を取得
+                video_details = scrape_video_details(video_id)
+                if not video_details:
+                    yield f"data: {json.dumps({'type': 'progress', 'message': f'取得失敗 - スキップ: {video_id}'})}\n\n"
+                    continue
+
+                # --- フィルタリング (Streamlit ロジックを適用) ---
+                temp_channel_name = video_details.get('channel_name', '')
+                temp_title = video_details.get('title', '')
+                temp_super_title = video_details.get('super_title', '')
+                temp_description = video_details.get('description', '')
+
+                # NGワードチェック
+                if re.search(r_strings_NG, temp_channel_name) or re.search(r_strings_NG, temp_title):
+                    logging.info(f"[SSE] NG word found in channel ({temp_channel_name}) or title ({temp_title}) for video {video_id}. Skipping.")
+                    yield f"data: {json.dumps({'type': 'progress', 'message': f'NGワード該当 - スキップ: {video_id}'})}\n\n"
+                    continue
+
+                check = False
+                # キーワードチェック (OR条件 - タイトル、スーパータイトル、説明)
+                if re.search(r_strings2, temp_title) or re.search(r_strings2, temp_super_title) or re.search(r_strings2, temp_description):
+                     check = True
+                     logging.info(f"[SSE] Keyword match found for video {video_id}.")
+                     yield f"data: {json.dumps({'type': 'progress', 'message': f'キーワード一致: {video_id}'})}\n\n"
+                # else: # AND条件もチェックする場合 (オプション)
+                #     if re.search(r_strings, temp_title) or re.search(r_strings, temp_super_title) or re.search(r_strings, temp_description):
+                #         check = True
+                #         logging.info(f"[SSE] AND Keyword match found for video {video_id}.")
+                #         yield f"data: {json.dumps({'type': 'progress', 'message': f'ANDキーワード一致: {video_id}'})}\n\n"
+
+                if not check:
+                    logging.info(f"[SSE] No keyword match for video {video_id}. Skipping.")
+                    # yield f"data: {json.dumps({'type': 'progress', 'message': f'キーワード不一致 - スキップ: {video_id}'})}\n\n" # 多すぎると煩雑
+                    continue
+
+                # --- 条件に合致した場合の処理 ---
+                filtered_results.append(video_details)
+                # クライアントに個別結果を送信 (オプション)
+                # result_for_frontend = {
+                #     'title': video_details.get('title', 'N/A'),
+                #     'url': video_details.get('video_url', '#'),
+                #     'channel_name': video_details.get('channel_name', 'N/A'),
+                #     'channel_url': video_details.get('channel_url', '#'),
+                #     'date': video_details.get('date_text', 'N/A'),
+                #     'view_count': video_details.get('view_count', 'N/A'),
+                # }
+                # yield f"data: {json.dumps({'type': 'result', 'result': result_for_frontend})}\n\n"
+
+                # SQLAlchemy Item オブジェクトを作成して保存リストに追加
+                item = Item()
+                item.title_name = video_details.get('title', '')
+                item.video_id = video_details.get('video_url', '')
+                item.channel_id = video_details.get('channel_url', '')
+                item.date_time = video_details.get('date_text', '') # 文字列を保存
+                item.view_counter = video_details.get('view_count', '')
+                item.channel_name = video_details.get('channel_name', '')
+                items_to_save.append(item)
+
+                # --- 関連動画の収集 ---
+                json_dict = video_details.get('raw_json_dict')
+                if json_dict:
+                    try:
+                        if 'contents' in json_dict and 'twoColumnWatchNextResults' in json_dict['contents']:
+                            secondary_results_section = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {})
+                            if secondary_results_section:
+                                secondary_results = secondary_results_section.get('secondaryResults', {}).get('results', [])
+                                added_related_count = 0
+                                for result in secondary_results:
+                                    if 'compactVideoRenderer' in result:
+                                        related_video_id = result['compactVideoRenderer'].get('videoId')
+                                        if related_video_id:
+                                            related_video_url = BASEURL + related_video_id
+                                            # 新しい動画IDで、かつ訪問済みでも処理待ちでもない場合に追加
+                                            if related_video_id not in all_videoIds and related_video_url not in visited_urls:
+                                                 all_videoIds.append(related_video_id)
+                                                 added_related_count += 1
+                                                 logging.debug(f"[SSE] Added related video ID: {related_video_id}")
+                                                 # リストが長くなりすぎないように制限 (オプション)
+                                                 if len(all_videoIds) > MAX_VIDEOS_TO_PROCESS * 3: # 制限を緩和
+                                                     logging.warning("[SSE] Related video list is very long, trimming.")
+                                                     all_videoIds = all_videoIds[:MAX_VIDEOS_TO_PROCESS * 3]
+                                                     break
+                                if added_related_count > 0:
+                                     yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画 {added_related_count} 件を追加。リストサイズ: {len(all_videoIds)}'})}\n\n"
+                    except (KeyError, IndexError, TypeError) as e:
+                        logging.error(f"[SSE] Error extracting related videos for {video_id}: {e}")
+                        yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画取得エラー ({video_id}): {str(e)[:30]}...'})}\n\n"
+
+                # リクエスト間隔を空ける (関数内で設定済み)
+
+            yield f"data: {json.dumps({'type': 'progress', 'message': 'データ収集完了。結果をソート中...'})}\n\n"
+
+            # --- 結果のソート ---
             try:
-                db_session.add_all(items_to_save)
-                db_session.commit()
-                logging.info(f"Saved {len(items_to_save)} items to database.")
+                filtered_results.sort(key=lambda x: parse_date_for_sorting(x.get('date_text', '')), reverse=True)
+                logging.info("[SSE] Results sorted by date (newest first).")
+                yield f"data: {json.dumps({'type': 'progress', 'message': '結果を日付順にソートしました。'})}\n\n"
             except Exception as e:
-                logging.error(f"Error saving to database: {e}")
-                db_session.rollback()
-        # db_session.close() # 一時的に閉じない。テキストファイル作成後にも使用する可能性があるため。
+                logging.error(f"[SSE] Error sorting results: {e}")
+                yield f"data: {json.dumps({'type': 'progress', 'message': f'ソートエラー: {str(e)}'})}\n\n"
 
-        # --- テキストファイルの生成 ---
-        text_file_path = f"{temp_dir}/{words_for_filename}_all.txt"
-        try:
-            with open(text_file_path, "w", encoding='utf-8') as f: # エンコーディング指定
-                for ind, data in enumerate(filtered_results):
-                    # Streamlit の txt ファイル出力形式に近づける
-                    f.write(f"{ind + 1 :07}\n") # インデックス (7桁ゼロ埋め)
-                    f.write(f"{data.get('title', 'N/A')}\n")
-                    f.write(f"{data.get('super_title', '')}\n") # スーパータイトル
-                    f.write(f"{data.get('date_text', 'N/A')}\n") # 日付
-                    f.write(f"{data.get('view_count', 'N/A')}\n")
-                    f.write(f"{data.get('video_url', 'N/A')}\n")
-                    f.write(f"{data.get('channel_name', 'N/A')}\n")
-                    f.write(f"{data.get('channel_url', 'N/A')}\n")
-                    f.write("\n----------\n")
-            logging.info(f"Text file created at: {text_file_path}")
+            # --- データベースに保存 ---
+            if items_to_save:
+                try:
+                    db_session.add_all(items_to_save)
+                    db_session.commit()
+                    logging.info(f"[SSE] Saved {len(items_to_save)} items to database.")
+                    yield f"data: {json.dumps({'type': 'progress', 'message': f'データベースに {len(items_to_save)} 件保存しました。'})}\n\n"
+                except Exception as e:
+                    logging.error(f"[SSE] Error saving to database: {e}")
+                    db_session.rollback()
+                    yield f"data: {json.dumps({'type': 'progress', 'message': f'データベース保存エラー: {str(e)}'})}\n\n"
+            db_session.close()
+
+            # --- テキストファイルの生成 ---
+            yield f"data: {json.dumps({'type': 'progress', 'message': 'テキストファイルを生成中...'})}\n\n"
+            text_file_path = f"{temp_dir}/{words_for_filename}_all.txt"
+            try:
+                with open(text_file_path, "w", encoding='utf-8') as f: # エンコーディング指定
+                    for ind, data in enumerate(filtered_results):
+                        # Streamlit の txt ファイル出力形式に近づける
+                        f.write(f"{ind + 1 :07}\n") # インデックス (7桁ゼロ埋め)
+                        f.write(f"{data.get('title', 'N/A')}\n")
+                        f.write(f"{data.get('super_title', '')}\n") # スーパータイトル
+                        f.write(f"{data.get('date_text', 'N/A')}\n") # 日付
+                        f.write(f"{data.get('view_count', 'N/A')}\n")
+                        f.write(f"{data.get('video_url', 'N/A')}\n")
+                        f.write(f"{data.get('channel_name', 'N/A')}\n")
+                        f.write(f"{data.get('channel_url', 'N/A')}\n")
+                        f.write("\n----------\n")
+                logging.info(f"[SSE] Text file created at: {text_file_path}")
+                yield f"data: {json.dumps({'type': 'progress', 'message': 'テキストファイルを生成しました。'})}\n\n"
+            except Exception as e:
+                logging.error(f"[SSE] Error creating text file: {e}")
+                yield f"data: {json.dumps({'type': 'progress', 'message': f'テキストファイル生成エラー: {str(e)}'})}\n\n"
+
+            # --- JSON レスポンス: ソートされた結果を返す ---
+            results_for_frontend = []
+            for res in filtered_results:
+                results_for_frontend.append({
+                    'title': res.get('title', 'N/A'),
+                    'url': res.get('video_url', '#'),
+                    'channel_name': res.get('channel_name', 'N/A'),
+                    'channel_url': res.get('channel_url', '#'),
+                    'date': res.get('date_text', 'N/A'), # 必要なら整形
+                    'view_count': res.get('view_count', 'N/A'),
+                    # 必要に応じて super_title なども追加
+                })
+
+            # --- 最終完了メッセージを送信 ---
+            yield f"data: {json.dumps({'type': 'done', 'total_results': len(results_for_frontend), 'message': '検索完了'})}\n\n"
+            logging.info(f"[SSE] Search completed. Total results: {len(results_for_frontend)}")
+
         except Exception as e:
-            logging.error(f"Error creating text file: {e}")
-            # テキストファイル作成失敗は致命的ではない
+            logging.error(f"[SSE] Error in search_sse generator: {e}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'message': f'サーバーエラー: {str(e)}'})}\n\n"
+            # DBセッションが開いていたら閉じる (generator内でのエラー処理は難しい場合があるため、try-finallyを使う方が良い)
+            # try:
+            #     if 'db_session' in locals() and db_session:
+            #         db_session.close()
+            # except:
+            #     pass
 
-        db_session.close() # ここでセッションを閉じる
+    # text/event-stream 形式でレスポンスをストリームする
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
-        # --- JSON レスポンス: ソートされた結果を返す ---
-        # フロントエンド表示用に必要な情報のみを抽出
-        results_for_frontend = []
-        for res in filtered_results:
-            results_for_frontend.append({
-                'title': res.get('title', 'N/A'),
-                'url': res.get('video_url', '#'),
-                'channel_name': res.get('channel_name', 'N/A'),
-                'channel_url': res.get('channel_url', '#'),
-                'date': res.get('date_text', 'N/A'), # 必要なら整形
-                'view_count': res.get('view_count', 'N/A'),
-                # 必要に応じて super_title なども追加
-            })
-
-        return jsonify({
-            'message': 'Search, scraping, filtering, recursive search, sorting, and file creation completed.',
-            'total_results': len(filtered_results),
-            'results': results_for_frontend, # フロントエンド用に整形された結果
-            'session_id': session['session_id'],
-        })
-
-    except Exception as e:
-        logging.error(f"Error in search route: {e}", exc_info=True)
-        # DBセッションが開いていたら閉じる
-        try:
-            if 'db_session' in locals() and db_session:
-                db_session.close()
-        except:
-            pass
-        return jsonify({'error': f'Search error: {str(e)}'}), 500
 
 @app.route('/download/<file_type>')
 def download_file(file_type):
@@ -903,4 +1039,8 @@ def not_found(error):
 if __name__ == '__main__':
     # Ensure removefolder directory exists
     my_makedirs('removefolder')
+    # --- 重要: Gunicorn タイムアウトを延長 ---
+    # このコードを直接実行する場合 (例: python app.py) は関係ありませんが、
+    # Gunicorn で実行する場合は、コマンドラインで --timeout を指定してください。
+    # 例: gunicorn --timeout 300 app:app
     app.run(debug=True, host='0.0.0.0', port=5000)
