@@ -462,39 +462,95 @@ def search_sse():
                 item.view_counter = video_details.get('view_count', '')
                 item.channel_name = video_details.get('channel_name', '')
                 items_to_save.append(item)
-
+                
                 # --- 関連動画の収集 ---
                 json_dict = video_details.get('raw_json_dict')
                 if json_dict:
-                    # write file
-                    with open(f"test{index}.json", 'w') as f:
-                        json.dump(json_dict, f, indent=4)
                     try:
+                        # 正しいパスで関連動画の results 配列を取得 (test1.json.txt の構造に基づく)
                         if 'contents' in json_dict and 'twoColumnWatchNextResults' in json_dict['contents']:
-                            secondary_results_section = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {})
-                            if secondary_results_section:
-                                secondary_results = secondary_results_section.get('secondaryResults', {}).get('results', [])
-                                added_related_count = 0
+                            secondary_results = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {}).get('secondaryResults', {}).get('results', [])
+                            
+                            logging.debug(f"[SSE] Found {len(secondary_results) if isinstance(secondary_results, list) else 'N/A'} items in secondary results for video {video_id}")
+
+                            added_related_count = 0
+                            # secondary_results がリストであることを確認
+                            if isinstance(secondary_results, list):
                                 for result in secondary_results:
+                                    related_video_id = None
+                                    # compactVideoRenderer から videoId を取得
                                     if 'compactVideoRenderer' in result:
                                         related_video_id = result['compactVideoRenderer'].get('videoId')
-                                        if related_video_id:
-                                            related_video_url = BASEURL + related_video_id
-                                            # 新しい動画IDで、かつ訪問済みでも処理待ちでもない場合に追加
-                                            if related_video_id not in all_videoIds and related_video_url not in visited_urls:
-                                                 all_videoIds.append(related_video_id)
-                                                 added_related_count += 1
-                                                 logging.debug(f"[SSE] Added related video ID: {related_video_id}")
-                                                 # リストが長くなりすぎないように制限 (オプション)
-                                                 if len(all_videoIds) > MAX_VIDEOS_TO_PROCESS * 3: # 制限を緩和
-                                                     logging.warning("[SSE] Related video list is very long, trimming.")
-                                                     all_videoIds = all_videoIds[:MAX_VIDEOS_TO_PROCESS * 3]
-                                                     break
-                                if added_related_count > 0:
-                                     yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画 {added_related_count} 件を追加。リストサイズ: {len(all_videoIds)}'})}\n\n"
+                                        logging.debug(f"[SSE] Found related video ID via compactVideoRenderer: {related_video_id}")
+                                    # lockupViewModel から contentId を取得
+                                    elif 'lockupViewModel' in result:
+                                        related_video_id = result['lockupViewModel'].get('contentId')
+                                        logging.debug(f"[SSE] Found related video ID via lockupViewModel: {related_video_id}")
+                                    
+                                    # 有効な ID が取得できた場合の処理
+                                    if related_video_id:
+                                        related_video_url = BASEURL + related_video_id
+                                        # 新しい動画IDで、かつ訪問済みでも処理待ちでもない場合に追加
+                                        if related_video_id not in all_videoIds and related_video_url not in visited_urls:
+                                             all_videoIds.append(related_video_id)
+                                             added_related_count += 1
+                                             logging.debug(f"[SSE] Added related video ID: {related_video_id}")
+                                             # リストが長くなりすぎないように制限 (オプション)
+                                             if len(all_videoIds) > MAX_VIDEOS_TO_PROCESS * 3: # 制限を緩和
+                                                 logging.warning("[SSE] Related video list is very long, trimming.")
+                                                 all_videoIds = all_videoIds[:MAX_VIDEOS_TO_PROCESS * 3]
+                                                 # リストがトリミングされたら、これ以上の追加をやめる
+                                                 break 
+                            
+                            if added_related_count > 0:
+                                 yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画 {added_related_count} 件を追加。リストサイズ: {len(all_videoIds)}'})}\n\n"
+                            elif len(secondary_results) > 0:
+                                 # 関連動画はあったが、追加されなかった場合（すべて重複など）
+                                 logging.debug(f"[SSE] Found related videos for {video_id}, but none were added (duplicates/visited). List size remains: {len(all_videoIds)}")
+                            else:
+                                 # 関連動画が見つからなかった場合
+                                 logging.debug(f"[SSE] No related videos found in the expected JSON path for video {video_id}.")
+
                     except (KeyError, IndexError, TypeError) as e:
                         logging.error(f"[SSE] Error extracting related videos for {video_id}: {e}")
                         yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画取得エラー ({video_id}): {str(e)[:30]}...'})}\n\n"
+                    except Exception as e: # その他の予期しないエラーもキャッチ
+                        logging.error(f"[SSE] Unexpected error while processing related videos for {video_id}: {e}", exc_info=True)
+                        yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画処理中に予期せぬエラー ({video_id})'})}\n\n"
+
+
+                # --- 関連動画の収集 ---
+                #json_dict = video_details.get('raw_json_dict')
+                #if json_dict:
+                #    # write file
+                #    with open(f"test{index}.json", 'w') as f:
+                #        json.dump(json_dict, f, indent=4)
+                #    try:
+                #        if 'contents' in json_dict and 'twoColumnWatchNextResults' in json_dict['contents']:
+                #            secondary_results_section = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {})
+                #            if secondary_results_section:
+                #                secondary_results = secondary_results_section.get('secondaryResults', {}).get('results', [])
+                #                added_related_count = 0
+                #                for result in secondary_results:
+                #                    if 'compactVideoRenderer' in result:
+                #                        related_video_id = result['compactVideoRenderer'].get('videoId')
+                #                        if related_video_id:
+                #                            related_video_url = BASEURL + related_video_id
+                #                            # 新しい動画IDで、かつ訪問済みでも処理待ちでもない場合に追加
+                #                            if related_video_id not in all_videoIds and related_video_url not in visited_urls:
+                #                                 all_videoIds.append(related_video_id)
+                #                                 added_related_count += 1
+                #                                 logging.debug(f"[SSE] Added related video ID: {related_video_id}")
+                #                                 # リストが長くなりすぎないように制限 (オプション)
+                #                                 if len(all_videoIds) > MAX_VIDEOS_TO_PROCESS * 3: # 制限を緩和
+                #                                     logging.warning("[SSE] Related video list is very long, trimming.")
+                #                                     all_videoIds = all_videoIds[:MAX_VIDEOS_TO_PROCESS * 3]
+                #                                     break
+                #                if added_related_count > 0:
+                #                     yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画 {added_related_count} 件を追加。リストサイズ: {len(all_videoIds)}'})}\n\n"
+                #    except (KeyError, IndexError, TypeError) as e:
+                #        logging.error(f"[SSE] Error extracting related videos for {video_id}: {e}")
+                #        yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画取得エラー ({video_id}): {str(e)[:30]}...'})}\n\n"
                 else:
                     print('raw_json_dict: error!')
                 
