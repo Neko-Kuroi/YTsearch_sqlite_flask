@@ -1,5 +1,5 @@
 # app.py
-from flask import Flask, render_template, request, jsonify, send_file, session # render_template を追加
+from flask import Flask, render_template, request, jsonify, send_file, session, Response # render_template を追加
 import urllib.request
 import urllib.parse
 import re
