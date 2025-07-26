@@ -315,41 +315,40 @@
 
         // displayResults 関数を少し修正して、追加モードに対応 (オプション)
         function displayResults(results, append = false) {
-    const resultsDiv = document.getElementById('results');
-    if (!append) {
-        resultsDiv.innerHTML = ''; // 新規表示の場合はクリア
-    }
-    if (results.length === 0 && !append) { // 新規表示で結果が空の場合
-        resultsDiv.innerHTML = '<p>結果が見つかりませんでした。</p>';
-        return;
-    }
+            const resultsDiv = document.getElementById('results');
+            if (!append) {
+                resultsDiv.innerHTML = ''; // 新規表示の場合はクリア
+            }
+            if (results.length === 0 && !append) { // 新規表示で結果が空の場合
+                resultsDiv.innerHTML = '<p>結果が見つかりませんでした。</p>';
+                return;
+            }
+            let htmlToAdd = '';
+                results.forEach((result, index) => {
+                htmlToAdd += `
+                    <div class="result-item">
+                        <div class="result-title">
+                            <a href="${result.url}" target="_blank">${escapeHtml(result.title)}</a>
+                        </div>
+                        <div class="result-meta">
+                            📅 ${escapeHtml(result.date)} | 👁️ ${escapeHtml(result.view_count)}
+                        </div>
+                        <div class="result-channel">
+                            チャンネル: <a href="${result.channel_url}" target="_blank">${escapeHtml(result.channel_name)}</a>
+                        </div>
+                    </div>
+                    `;
+                });
 
-    let htmlToAdd = '';
-    results.forEach((result, index) => {
-        htmlToAdd += `
-            <div class="result-item">
-                <div class="result-title">
-                    <a href="${result.url}" target="_blank">${escapeHtml(result.title)}</a>
-                </div>
-                <div class="result-meta">
-                    📅 ${escapeHtml(result.date)} | 👁️ ${escapeHtml(result.view_count)}
-                </div>
-                <div class="result-channel">
-                    チャンネル: <a href="${result.channel_url}" target="_blank">${escapeHtml(result.channel_name)}</a>
-                </div>
-            </div>
-        `;
-    });
-
-    if (append) {
-        // 追加モード: 既存のHTMLに新しいHTMLを追加
-        resultsDiv.innerHTML += htmlToAdd;
-    } else {
-        // 新規表示モード: ヘッダー付きで全体を置き換え
-        let headerHtml = `<h2>検索結果 (${results.length} 件)</h2>`;
-        resultsDiv.innerHTML = headerHtml + htmlToAdd;
-    }
-}
+            if (append) {
+                // 追加モード: 既存のHTMLに新しいHTMLを追加
+                resultsDiv.innerHTML += htmlToAdd;
+            } else {
+                // 新規表示モード: ヘッダー付きで全体を置き換え
+                let headerHtml = `<h2>検索結果 (${results.length} 件)</h2>`;
+                resultsDiv.innerHTML = headerHtml + htmlToAdd;
+            }
+        }
         //function displayResults(results, append = false) {
         //    const resultsDiv = document.getElementById('results');
         //    if (!append) {
