@@ -409,6 +409,9 @@ def search_sse():
                 # 個別動画ページから詳細情報を取得
                 if index > 200:
                     time.sleep(1)
+                elif index > 400:
+                    time.sleep(2)
+                    
                 video_details = scrape_video_details(video_id)
                 if not video_details:
                     yield f"data: {json.dumps({'type': 'progress', 'message': f'取得失敗 - スキップ: {video_id}'})}\n\n"
