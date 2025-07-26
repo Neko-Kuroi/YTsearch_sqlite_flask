@@ -133,7 +133,7 @@ def first_access(keyword):
     except Exception as e:
         logging.error(f"Unexpected error in first_access for {keyword}: {e}")
 
-    time.sleep(1) # エラー時も少し待機
+    time.sleep(2) # エラー時も少し待機
     return [], [] # エラー時は空のリストを返す
 
 # --- 新規関数: 個別動画ページから詳細情報を取得 ---
@@ -147,7 +147,7 @@ def scrape_video_details(video_id, base_url='https://www.youtube.com/watch?v='):
     # --- ここに Streamlit の for ループ内のスクレイピングロジックを移植 ---
     # (簡略化した例です。実際にはもっと多くの情報を抽出します)
     try:
-        time.sleep(2) # リクエスト間隔を空ける (2秒に変更)
+        #time.sleep(2) # リクエスト間隔を空ける (2秒に変更)
         # setup_requests() で設定された opener を使用
         response = urllib.request.urlopen(target_url, timeout=15) # タイムアウトを15秒に延長
         if response.getcode() != 200:
