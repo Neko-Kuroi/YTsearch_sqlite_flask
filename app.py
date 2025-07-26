@@ -407,11 +407,11 @@ def search_sse():
                 logging.info(f"[SSE] Processing video {processed_count}/{MAX_VIDEOS_TO_PROCESS} (List index {index-1}/{len(all_videoIds)}): {video_id}")
 
                 # 個別動画ページから詳細情報を取得
-                if index > 200 and index < 400:
-                    time.sleep(1)
                 if index > 400:
                     time.sleep(2)
-                    
+                elif index > 200:
+                    time.sleep(1)    
+                
                 video_details = scrape_video_details(video_id)
                 if not video_details:
                     yield f"data: {json.dumps({'type': 'progress', 'message': f'取得失敗 - スキップ: {video_id}'})}\n\n"
