@@ -466,13 +466,14 @@ def search_sse():
                 # --- 関連動画の収集 ---
                 json_dict = video_details.get('raw_json_dict')
                 if json_dict:
+                    # write file
+                    with open(f"test{index}.json", 'w') as f:
+                        json.dump(json_dict, f, indent=4)
                     try:
                         if 'contents' in json_dict and 'twoColumnWatchNextResults' in json_dict['contents']:
-                            #secondary_results_section = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {})
-                            #if secondary_results_section:
-                            #    secondary_results = secondary_results_section.get('secondaryResults', {}).get('results', [])
-                                # 修正: secondaryResults は twoColumnWatchNextResults の直下
-                                secondary_results = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {}).get('results', [])
+                            secondary_results_section = json_dict['contents']['twoColumnWatchNextResults'].get('secondaryResults', {})
+                            if secondary_results_section:
+                                secondary_results = secondary_results_section.get('secondaryResults', {}).get('results', [])
                                 added_related_count = 0
                                 for result in secondary_results:
                                     if 'compactVideoRenderer' in result:
