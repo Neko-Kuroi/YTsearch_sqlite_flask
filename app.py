@@ -638,6 +638,8 @@ def search_sse():
     # text/event-stream 形式でレスポンスをストリームする
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
+import io # メモリバッファ用
+
 @app.route('/download/<file_type>')
 def download_file(file_type):
     try:
@@ -648,57 +650,132 @@ def download_file(file_type):
 
         temp_dir = f"removefolder/{session['session_id']}"
         logging.info(f"[Download] Looking for files in session directory: {temp_dir}")
-        # ディレクトリが存在するか確認
+
         if not os.path.exists(temp_dir):
             logging.error(f"[Download] Session directory does not exist: {temp_dir}")
             return jsonify({'error': 'Session directory not found'}), 404
 
-        # 中身をリストアップ (デバッグ用)
         try:
             files_in_dir = os.listdir(temp_dir)
             logging.info(f"[Download] Files in session directory: {files_in_dir}")
         except Exception as e:
             logging.error(f"[Download] Error listing session directory: {e}")
 
+        file_path = None
+        suggested_filename = "youtube_search"
+
         if file_type == 'sqlite':
             file_path = f"{temp_dir}/sqlite_.db"
-            logging.info(f"[Download] Attempting to send SQLite file: {file_path}")
-            # ファイルが存在するか確認
-            if os.path.exists(file_path):
-                file_size = os.path.getsize(file_path)
-                logging.info(f"[Download] SQLite file exists, size: {file_size} bytes")
-                # send_file が返すオブジェクトを確認
-                response = send_file(file_path, as_attachment=True, download_name='youtube_search.db')
-                logging.info(f"[Download] send_file called for SQLite. Response type: {type(response)}")
-                return response
-            else:
-                logging.error(f"[Download] SQLite file not found at: {file_path}")
-                return jsonify({'error': 'SQLite file not found on disk'}), 404
-
+            suggested_filename = "youtube_search.db"
         elif file_type == 'txt':
-            # ... (txt ファイル処理も同様にログを追加) ...
             txt_files = [f for f in os.listdir(temp_dir) if f.endswith('_all.txt')]
             if txt_files:
                 file_path = os.path.join(temp_dir, txt_files[0])
-                if os.path.exists(file_path):
-                    # ファイル名を適切に設定
-                    suggested_filename = txt_files[0]
-                    logging.info(f"[Download] Attempting to send TXT file: {file_path}")
-                    response = send_file(file_path, as_attachment=True, download_name=suggested_filename)
-                    logging.info(f"[Download] send_file called for TXT. Response type: {type(response)}")
-                    return response
-                else:
-                    logging.error(f"[Download] TXT file path does not exist: {file_path}")
-                    return jsonify({'error': 'Text file not found on disk'}), 404
+                suggested_filename = txt_files[0]
             else:
                 logging.warning(f"[Download] No text file found in session directory: {temp_dir}")
                 return jsonify({'error': 'Text file not found'}), 404
+        else:
+            logging.warning(f"[Download] Unsupported file type requested: {file_type}")
+            return jsonify({'error': 'File type not supported'}), 400
 
-        logging.warning(f"[Download] Unsupported file type requested: {file_type}")
-        return jsonify({'error': 'File type not supported'}), 400
+        if file_path and os.path.exists(file_path):
+            logging.info(f"[Download] Attempting to send file: {file_path}")
+            try:
+                # --- 代替方法: ファイルを読み込んでレスポンスを直接作成 ---
+                with open(file_path, 'rb') as f: # バイナリモードで読み込み
+                    file_data = f.read()
+                
+                file_size = len(file_data)
+                logging.info(f"[Download] File read successfully, size: {file_size} bytes")
+
+                if file_size == 0:
+                    logging.warning(f"[Download] File is empty: {file_path}")
+                    # 空ファイルを送信するか、エラーを返すかは設計による
+                    # ここでは空のレスポンスを返す
+                    response = Response(b"", mimetype='application/octet-stream') 
+                else:
+                    response = Response(file_data, mimetype='application/octet-stream')
+                
+                # ダウンロード用のヘッダーを設定
+                response.headers['Content-Disposition'] = f'attachment; filename="{suggested_filename}"'
+                response.headers['Content-Length'] = str(file_size)
+                
+                logging.info(f"[Download] Response created directly. Size: {file_size} bytes")
+                return response
+
+            except Exception as e:
+                logging.error(f"[Download] Error reading or sending file {file_path}: {e}", exc_info=True)
+                return jsonify({'error': f'Error reading file: {str(e)}'}), 500
+        else:
+            logging.error(f"[Download] File not found at: {file_path}")
+            return jsonify({'error': 'File not found on disk'}), 404
+
     except Exception as e:
         logging.error(f"[Download] Error in download route: {e}", exc_info=True)
         return jsonify({'error': f'Download error: {str(e)}'}), 500
+
+#@app.route('/download/<file_type>')
+#def download_file(file_type):
+#    try:
+#        logging.info(f"[Download] Request received for file_type: {file_type}")
+#        if 'session_id' not in session:
+#            logging.warning("[Download] No active session found.")
+#            return jsonify({'error': 'No active session'}), 400
+#
+#        temp_dir = f"removefolder/{session['session_id']}"
+#        logging.info(f"[Download] Looking for files in session directory: {temp_dir}")
+#        # ディレクトリが存在するか確認
+#        if not os.path.exists(temp_dir):
+#            logging.error(f"[Download] Session directory does not exist: {temp_dir}")
+#            return jsonify({'error': 'Session directory not found'}), 404
+#
+#        # 中身をリストアップ (デバッグ用)
+#        try:
+#            files_in_dir = os.listdir(temp_dir)
+#            logging.info(f"[Download] Files in session directory: {files_in_dir}")
+#        except Exception as e:
+#            logging.error(f"[Download] Error listing session directory: {e}")
+#
+#        if file_type == 'sqlite':
+#            file_path = f"{temp_dir}/sqlite_.db"
+#            logging.info(f"[Download] Attempting to send SQLite file: {file_path}")
+#            # ファイルが存在するか確認
+#            if os.path.exists(file_path):
+#                file_size = os.path.getsize(file_path)
+#                logging.info(f"[Download] SQLite file exists, size: {file_size} bytes")
+#                # send_file が返すオブジェクトを確認
+#                response = send_file(file_path, as_attachment=True, download_name='youtube_search.db')
+#                logging.info(f"[Download] send_file called for SQLite. Response type: {type(response)}")
+#                return response
+#            else:
+#                logging.error(f"[Download] SQLite file not found at: {file_path}")
+#                return jsonify({'error': 'SQLite file not found on disk'}), 404
+#
+#        elif file_type == 'txt':
+#            # ... (txt ファイル処理も同様にログを追加) ...
+#            txt_files = [f for f in os.listdir(temp_dir) if f.endswith('_all.txt')]
+#            if txt_files:
+#                file_path = os.path.join(temp_dir, txt_files[0])
+#                if os.path.exists(file_path):
+#                    # ファイル名を適切に設定
+#                    suggested_filename = txt_files[0]
+#                    logging.info(f"[Download] Attempting to send TXT file: {file_path}")
+#                    response = send_file(file_path, as_attachment=True, download_name=suggested_filename)
+#                    logging.info(f"[Download] send_file called for TXT. Response type: {type(response)}")
+#                    return response
+#                else:
+#                    logging.error(f"[Download] TXT file path does not exist: {file_path}")
+#                    return jsonify({'error': 'Text file not found on disk'}), 404
+#            else:
+#                logging.warning(f"[Download] No text file found in session directory: {temp_dir}")
+#                return jsonify({'error': 'Text file not found'}), 404
+#
+#        logging.warning(f"[Download] Unsupported file type requested: {file_type}")
+#        return jsonify({'error': 'File type not supported'}), 400
+#    except Exception as e:
+#        logging.error(f"[Download] Error in download route: {e}", exc_info=True)
+#        return jsonify({'error': f'Download error: {str(e)}'}), 500
 
 ##@app.route('/download/<file_type>')
 #def download_file(file_type):
