@@ -395,40 +395,64 @@
             return text.replace(/[&<>"']/g, function(m) { return map[m]; });
         }
 
-        function downloadFile(fileType) {
-            // より安全なダウンロード方法 (fetch を使用)
-            fetch(`/download/${fileType}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok ' + response.statusText);
-                    }
-                    return response.blob();
-                })
-                .then(blob => {
-                    // ファイル名を Content-Disposition ヘッダーから取得するか、デフォルトを設定
-                    const contentDisposition = response.headers.get('Content-Disposition');
-                    let filename = `youtube_search.${fileType === 'sqlite' ? 'db' : 'txt'}`;
-                    if (contentDisposition) {
-                        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-                        if (filenameMatch && filenameMatch.length === 2) {
-                            filename = filenameMatch[1];
-                        }
-                    }
-                    // ダウンロードリンクを作成してクリック
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(url); // メモリ解放
-                })
-                .catch(error => {
-                    console.error('Download error:', error);
-                    alert('ダウンロードに失敗しました: ' + error.message);
-                });
-        }
+	function downloadFile(fileType) {
+	    fetch(`/download/${fileType}`)
+	        .then(response => {
+	            if (!response.ok) {
+	                throw new Error('Network response was not ok ' + response.statusText);
+	            }
+	            console.log(`[JS Debug] Fetch successful for ${fileType}, status: ${response.status}, content-type: ${response.headers.get('content-type')}`);
+	            return response.blob();
+	        })
+	        .then(blob => {
+	            console.log(`[JS Debug] Blob received for ${fileType}, size: ${blob.size} bytes`); // <- ここを追加
+	            if (blob.size === 0) {
+	                console.error(`[JS Debug] Received empty blob for ${fileType}!`);
+	                alert('ダウンロードに失敗しました：ファイルが空です。');
+	                return;
+	            }
+	            // ... (残りのダウンロード処理) ...
+	        })
+	        .catch(error => {
+	            console.error('[JS Debug] Download error:', error);
+	            alert('ダウンロードに失敗しました: ' + error.message);
+	        });
+	}
+
+       // function downloadFile(fileType) {
+       //     // より安全なダウンロード方法 (fetch を使用)
+       //     fetch(`/download/${fileType}`)
+       //         .then(response => {
+       //             if (!response.ok) {
+       //                 throw new Error('Network response was not ok ' + response.statusText);
+       //             }
+       //             return response.blob();
+       //         })
+       //         .then(blob => {
+       //             // ファイル名を Content-Disposition ヘッダーから取得するか、デフォルトを設定
+       //             const contentDisposition = response.headers.get('Content-Disposition');
+       //             let filename = `youtube_search.${fileType === 'sqlite' ? 'db' : 'txt'}`;
+       //             if (contentDisposition) {
+       //                 const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+       //                 if (filenameMatch && filenameMatch.length === 2) {
+       //                     filename = filenameMatch[1];
+       //                 }
+       //             }
+       //             // ダウンロードリンクを作成してクリック
+       //             const url = window.URL.createObjectURL(blob);
+       //             const link = document.createElement('a');
+       //             link.href = url;
+       //             link.download = filename;
+       //             document.body.appendChild(link);
+       //             link.click();
+       //             document.body.removeChild(link);
+       //             window.URL.revokeObjectURL(url); // メモリ解放
+       //         })
+       //         .catch(error => {
+       //             console.error('Download error:', error);
+       //             alert('ダウンロードに失敗しました: ' + error.message);
+       //         });
+       // }
 
         document.getElementById('keywords').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
