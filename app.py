@@ -492,7 +492,9 @@ def search_sse():
                     except (KeyError, IndexError, TypeError) as e:
                         logging.error(f"[SSE] Error extracting related videos for {video_id}: {e}")
                         yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画取得エラー ({video_id}): {str(e)[:30]}...'})}\n\n"
-
+                else:
+                    print('raw_json_dict: error!')
+                
                 # リクエスト間隔を空ける (関数内で設定済み)
 
             yield f"data: {json.dumps({'type': 'progress', 'message': 'データ収集完了。結果をソート中...'})}\n\n"
