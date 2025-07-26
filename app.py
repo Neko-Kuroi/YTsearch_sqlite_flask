@@ -381,7 +381,7 @@ def search_sse():
             BASEURL = 'https://www.youtube.com/watch?v='
 
             # --- 重要: 処理する動画数の上限を引き上げ ---
-            MAX_VIDEOS_TO_PROCESS = 100 # 例として100に増やす
+            MAX_VIDEOS_TO_PROCESS = 500 # 例として100に増やす
             processed_count = 0
             index = 0
             total_ids_to_process = len(all_videoIds) # 初期リストの長さ
