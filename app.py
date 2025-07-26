@@ -443,15 +443,15 @@ def search_sse():
                 # --- 条件に合致した場合の処理 ---
                 filtered_results.append(video_details)
                 # クライアントに個別結果を送信 (オプション)
-                # result_for_frontend = {
-                #     'title': video_details.get('title', 'N/A'),
-                #     'url': video_details.get('video_url', '#'),
-                #     'channel_name': video_details.get('channel_name', 'N/A'),
-                #     'channel_url': video_details.get('channel_url', '#'),
-                #     'date': video_details.get('date_text', 'N/A'),
-                #     'view_count': video_details.get('view_count', 'N/A'),
-                # }
-                # yield f"data: {json.dumps({'type': 'result', 'result': result_for_frontend})}\n\n"
+                result_for_frontend = {
+                    'title': video_details.get('title', 'N/A'),
+                    'url': video_details.get('video_url', '#'),
+                    'channel_name': video_details.get('channel_name', 'N/A'),
+                    'channel_url': video_details.get('channel_url', '#'),
+                    'date': video_details.get('date_text', 'N/A'),
+                    'view_count': video_details.get('view_count', 'N/A'),
+                }
+                yield f"data: {json.dumps({'type': 'result', 'result': result_for_frontend})}\n\n"
 
                 # SQLAlchemy Item オブジェクトを作成して保存リストに追加
                 item = Item()
