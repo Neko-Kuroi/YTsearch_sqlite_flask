@@ -407,9 +407,9 @@ def search_sse():
                 logging.info(f"[SSE] Processing video {processed_count}/{MAX_VIDEOS_TO_PROCESS} (List index {index-1}/{len(all_videoIds)}): {video_id}")
 
                 # 個別動画ページから詳細情報を取得
-                if index > 200:
+                if index > 200 and index < 400:
                     time.sleep(1)
-                elif index > 400:
+                if index > 400:
                     time.sleep(2)
                     
                 video_details = scrape_video_details(video_id)
