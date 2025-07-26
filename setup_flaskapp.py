@@ -56,7 +56,7 @@ def setup_bore_tunnel():
     # stdoutとstderrをsubprocess.PIPEにリダイレクトしない
     print(" flask アプリケーションを起動しています...")
     flask_process = subprocess.Popen(
-        ["gunicorn", "--bind", "0.0.0.0:5000", "app:app", "--timeout", "240", "--access-logfile", "-", "--error-logfile", "-"],
+        ["gunicorn", "--bind", "0.0.0.0:5000", "app:app", "--access-logfile", "-", "--error-logfile", "-"],
         #["gunicorn", "--bind", "0.0.0.0:5000", "DBsearch.app:app", "--access-logfile", "-", "--error-logfile", "-"],
         # stdout=subprocess.PIPE, # ログ出力しないため削除
         # stderr=subprocess.PIPE, # ログ出力しないため削除
@@ -175,7 +175,7 @@ def setup_cloudflare_tunnel():
     # stdoutとstderrをsubprocess.PIPEにリダイレクトしない
     print(" flask アプリケーションを起動しています...")
     flask_process = subprocess.Popen(
-        ["gunicorn", "--bind", "0.0.0.0:5000", "app:app", "--timeout", "240", "--access-logfile", "-", "--error-logfile", "-"],
+        ["gunicorn", "--bind", "0.0.0.0:5000", "app:app", "--access-logfile", "-", "--error-logfile", "-"],
         #["gunicorn", "--bind", "0.0.0.0:5000", "DBsearch.app:app", "--access-logfile", "-", "--error-logfile", "-"],
         # stdout=subprocess.PIPE, # ログ出力しないため削除
         # stderr=subprocess.PIPE, # ログ出力しないため削除
