@@ -391,8 +391,8 @@ def search_sse():
                 index += 1
                 processed_count += 1
 
-                # 進捗表示 (例: 10件ごと、または最後)
-                if processed_count % 10 == 1 or index >= len(all_videoIds) or processed_count >= MAX_VIDEOS_TO_PROCESS:
+                # 進捗表示 (例: 2件ごと、または最後)
+                if processed_count % 2 == 0 or index >= len(all_videoIds) or processed_count >= MAX_VIDEOS_TO_PROCESS:
                      #yield f"data: {json.dumps({'type': 'progress', 'message': f'動画情報を取得中... ({processed_count}/{min(total_ids_to_process, MAX_VIDEOS_TO_PROCESS)}) ID: {video_id}'})}\n\n"
                      yield f"data: {json.dumps({'type': 'progress', 'message': f'動画情報を取得中... ({processed_count}/{min(len(all_videoIds), MAX_VIDEOS_TO_PROCESS)}) ID: {video_id}'})}\n\n"
 
