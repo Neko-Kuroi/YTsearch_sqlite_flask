@@ -406,9 +406,9 @@ def search_sse():
 
                 # 個別動画ページから詳細情報を取得
                 if index > 400:
-                    time.sleep(2)
+                    time.sleep(1)
                 elif index < 400:
-                    time.sleep(1)    
+                    time.sleep(0.5)    
                 
                 video_details = scrape_video_details(video_id)
                 if not video_details:
