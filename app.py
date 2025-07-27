@@ -65,7 +65,6 @@ def get_session_db(temp_dir):
 # --- 移植した first_access 関数 ---
 def first_access(keyword):
     """Streamlit コードから移植した first_access 関数"""
-    time.sleep(1) # 必要に応じて調整
     target_url = "https://www.youtube.com/results?search_query=" + keyword
     try:
         # setup_requests() で設定された opener を使用
@@ -75,7 +74,7 @@ def first_access(keyword):
             return [], []
         html = search_response.read()
         html_strings = html.decode()
-        # del(html) # Python では不要だが、メモリ節約のため残す
+        del(html) # Python では不要だが、メモリ節約のため残す
 
         # """ extract json data """
         json_strings = ""
@@ -89,7 +88,7 @@ def first_access(keyword):
                      end = end_match.end() - 1 # ';' の位置を終端とする
                      json_strings = str(script_tag)[start:end]
                      break
-        # del(soup) # Python では不要だが、メモリ節約のため残す
+        del(soup) # Python では不要だが、メモリ節約のため残す
 
         if not json_strings:
              logging.warning("Failed to extract JSON data from search results.")
@@ -147,7 +146,6 @@ def scrape_video_details(video_id, base_url='https://www.youtube.com/watch?v='):
     # --- ここに Streamlit の for ループ内のスクレイピングロジックを移植 ---
     # (簡略化した例です。実際にはもっと多くの情報を抽出します)
     try:
-        #time.sleep(2) # リクエスト間隔を空ける (2秒に変更)
         # setup_requests() で設定された opener を使用
         response = urllib.request.urlopen(target_url, timeout=15) # タイムアウトを15秒に延長
         if response.getcode() != 200:
@@ -409,7 +407,7 @@ def search_sse():
                 # 個別動画ページから詳細情報を取得
                 if index > 400:
                     time.sleep(2)
-                elif index > 200:
+                elif index < 400:
                     time.sleep(1)    
                 
                 video_details = scrape_video_details(video_id)
@@ -560,7 +558,6 @@ def search_sse():
                 else:
                     print('raw_json_dict: error!')
                 
-                # リクエスト間隔を空ける (関数内で設定済み)
 
             yield f"data: {json.dumps({'type': 'progress', 'message': 'データ収集完了。結果をソート中...'})}\n\n"
 
