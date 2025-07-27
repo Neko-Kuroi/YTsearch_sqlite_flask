@@ -600,17 +600,17 @@ def search_sse():
                 yield f"data: {json.dumps({'type': 'progress', 'message': f'ソートエラー: {str(e)}'})}\n\n"
 
             # --- データベースに保存 ---
-            if items_to_save:
-                try:
-                    db_session.add_all(items_to_save)
-                    db_session.commit()
-                    logging.info(f"[SSE] Saved {len(items_to_save)} items to database.")
-                    yield f"data: {json.dumps({'type': 'progress', 'message': f'データベースに {len(items_to_save)} 件保存しました。'})}\n\n"
-                except Exception as e:
-                    logging.error(f"[SSE] Error saving to database: {e}")
-                    db_session.rollback()
-                    yield f"data: {json.dumps({'type': 'progress', 'message': f'データベース保存エラー: {str(e)}'})}\n\n"
-            db_session.close()
+            #if items_to_save:
+            #    try:
+            #        db_session.add_all(items_to_save)
+            #        db_session.commit()
+            #        logging.info(f"[SSE] Saved {len(items_to_save)} items to database.")
+            #        yield f"data: {json.dumps({'type': 'progress', 'message': f'データベースに {len(items_to_save)} 件保存しました。'})}\n\n"
+            #    except Exception as e:
+            #        logging.error(f"[SSE] Error saving to database: {e}")
+            #        db_session.rollback()
+            #        yield f"data: {json.dumps({'type': 'progress', 'message': f'データベース保存エラー: {str(e)}'})}\n\n"
+            #db_session.close()
 
             # --- テキストファイルの生成 ---
             yield f"data: {json.dumps({'type': 'progress', 'message': 'テキストファイルを生成中...'})}\n\n"
