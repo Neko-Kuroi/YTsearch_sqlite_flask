@@ -614,7 +614,8 @@ def search_sse():
 
             # --- テキストファイルの生成 ---
             yield f"data: {json.dumps({'type': 'progress', 'message': 'テキストファイルを生成中...'})}\n\n"
-            text_file_path = f"{temp_dir}/{words_for_filename}_all.txt"
+            #text_file_path = f"{temp_dir}/{words_for_filename}_all.txt"
+            text_file_path = f"{temp_dir}/results_all.txt"
             try:
                 with open(text_file_path, "w", encoding='utf-8') as f: # エンコーディング指定
                     for ind, data in enumerate(filtered_results):
@@ -697,7 +698,8 @@ def download_file(file_type):
             txt_files = [f for f in os.listdir(temp_dir) if f.endswith('_all.txt')]
             if txt_files:
                 file_path = os.path.join(temp_dir, txt_files[0])
-                suggested_filename = txt_files[0]
+                #suggested_filename = txt_files[0]
+                suggested_filename = 'results_all.txt'
             else:
                 logging.warning(f"[Download] No text file found in session directory: {temp_dir}")
                 return jsonify({'error': 'Text file not found'}), 404
