@@ -375,7 +375,7 @@ def search_sse():
             all_videoIds = videoIds_unique[:] # 初期リストで初期化
             visited_urls = set()
             filtered_results = []
-            items_to_save = []
+#            items_to_save = []
             BASEURL = 'https://www.youtube.com/watch?v='
 
             # --- 重要: 処理する動画数の上限を引き上げ ---
@@ -458,15 +458,38 @@ def search_sse():
                 yield f"data: {json.dumps({'type': 'result', 'result': result_for_frontend})}\n\n"
 
                 # SQLAlchemy Item オブジェクトを作成して保存リストに追加
-                item = Item()
-                item.title_name = video_details.get('title', '')
-                item.video_id = video_details.get('video_url', '')
-                item.channel_id = video_details.get('channel_url', '')
-                item.date_time = video_details.get('date_text', '') # 文字列を保存
-                item.view_counter = video_details.get('view_count', '')
-                item.channel_name = video_details.get('channel_name', '')
-                items_to_save.append(item)
-                
+#                item = Item()
+#                item.title_name = video_details.get('title', '')
+#                item.video_id = video_details.get('video_url', '')
+#                item.channel_id = video_details.get('channel_url', '')
+#                item.date_time = video_details.get('date_text', '') # 文字列を保存
+#                item.view_counter = video_details.get('view_count', '')
+#                item.channel_name = video_details.get('channel_name', '')
+#                items_to_save.append(item)
+
+                 # --- 変更後: Item オブジェクトを作成し、即時データベースに保存 ---
+                try:
+                    item = Item()
+                    item.title_name = video_details.get('title', '')
+                    item.video_id = video_details.get('video_url', '')
+                    item.channel_id = video_details.get('channel_url', '')
+                    item.date_time = video_details.get('date_text', '') # 文字列を保存
+                    item.view_counter = video_details.get('view_count', '')
+                    item.channel_name = video_details.get('channel_name', '')
+                     
+                    db_session.add(item) # データベースセッションに追加
+                    db_session.commit()  # 即時コミットして保存
+                    logging.info(f"[SSE] Saved 1 item (ID: {video_details.get('video_id', 'N/A')}) to database.")
+                    # オプション: 進捗に保存件数を追加
+                    yield f"data: {json.dumps({'type': 'progress', 'message': f'動画情報を取得中... ({processed_count}/{min(len(all_videoIds), MAX_VIDEOS_TO_PROCESS)}) ID: {video_id} (DB保存済み)'})}"
+
+                except Exception as e:
+                    logging.error(f"[SSE] Error saving item (ID: {video_details.get('video_id', 'N/A')}) to database: {e}")
+                    db_session.rollback() # エラー時はロールバック
+                    # オプション: エラーを進捗として通知
+                    yield f"data: {json.dumps({'type': 'progress', 'message': f'動画 {video_id} のDB保存エラー: {str(e)[:30]}...'})}"
+                # ---
+
                 # --- 関連動画の収集 ---
                 json_dict = video_details.get('raw_json_dict')
                 if json_dict:
@@ -522,6 +545,14 @@ def search_sse():
                         logging.error(f"[SSE] Unexpected error while processing related videos for {video_id}: {e}", exc_info=True)
                         yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画処理中に予期せぬエラー ({video_id})'})}\n\n"
 
+            # --- ループ終了後: items_to_save に関連する保存処理は削除 ---
+            # ループ内で個別に保存しているので、ここでの一括保存は不要
+            # ただし、セッションクローズは必要
+            try:
+                db_session.close()
+                logging.info("[SSE] Database session closed.")
+            except Exception as e:
+                logging.error(f"[SSE] Error closing database session: {e}")
 
                 # --- 関連動画の収集 ---
                 #json_dict = video_details.get('raw_json_dict')
@@ -555,8 +586,6 @@ def search_sse():
                 #    except (KeyError, IndexError, TypeError) as e:
                 #        logging.error(f"[SSE] Error extracting related videos for {video_id}: {e}")
                 #        yield f"data: {json.dumps({'type': 'progress', 'message': f'関連動画取得エラー ({video_id}): {str(e)[:30]}...'})}\n\n"
-                else:
-                    print('raw_json_dict: error!')
                 
 
             yield f"data: {json.dumps({'type': 'progress', 'message': 'データ収集完了。結果をソート中...'})}\n\n"
