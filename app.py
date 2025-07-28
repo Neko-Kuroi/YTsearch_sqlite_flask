@@ -281,6 +281,49 @@ def parse_date_for_sorting(date_str):
         logging.warning(f"Could not parse date '{date_str}' for sorting: {e}")
         return datetime.datetime.min # パース失敗時はリストの最後に来るよう最小値を返す
 
+def cleanup_session_files(temp_dir, delay_seconds=300):
+    """
+    指定されたディレクトリ内の sqlite_.db と results.txt を
+    delay_seconds 秒後に削除する。
+    """
+    def delete_files():
+        try:
+            # delay_seconds 秒待機
+            time.sleep(delay_seconds)
+            
+            db_file_path = os.path.join(temp_dir, 'sqlite_.db')
+            txt_file_path = os.path.join(temp_dir, 'results.txt') # ファイル名を results.txt に統一した前提
+            
+            # データベースファイルを削除
+            if os.path.exists(db_file_path):
+                os.remove(db_file_path)
+                logging.info(f"[Cleanup] Deleted database file: {db_file_path}")
+            else:
+                logging.debug(f"[Cleanup] Database file not found (skipped): {db_file_path}")
+                
+            # テキストファイルを削除
+            if os.path.exists(txt_file_path):
+                os.remove(txt_file_path)
+                logging.info(f"[Cleanup] Deleted text file: {txt_file_path}")
+            else:
+                logging.debug(f"[Cleanup] Text file not found (skipped): {txt_file_path}")
+                
+            # オプション: ディレクトリ自体も空なら削除
+            # try:
+            #     if os.path.isdir(temp_dir) and not os.listdir(temp_dir):
+            #         os.rmdir(temp_dir)
+            #         logging.info(f"[Cleanup] Deleted empty session directory: {temp_dir}")
+            # except OSError as e:
+            #     logging.warning(f"[Cleanup] Could not delete session directory {temp_dir}: {e}")
+            
+        except Exception as e:
+            logging.error(f"[Cleanup] Error during file cleanup for {temp_dir}: {e}", exc_info=True)
+
+    # ファイル削除関数をバックグラウンドスレッドで実行
+    cleanup_thread = threading.Thread(target=delete_files, daemon=True)
+    cleanup_thread.start()
+    logging.info(f"[Cleanup] Started cleanup thread for {temp_dir} to run in {delay_seconds} seconds.")
+
 # --- Flask Routes ---
 
 @app.route('/')
@@ -635,6 +678,14 @@ def search_sse():
                 logging.error(f"[SSE] Error creating text file: {e}")
                 yield f"data: {json.dumps({'type': 'progress', 'message': f'テキストファイル生成エラー: {str(e)}'})}\n\n"
 
+            # --- 新規追加: ファイル自動削除タイマーを起動 ---
+            # cleanup_session_files 関数を呼び出して、バックグラウンドでタイマー開始
+            try:
+                cleanup_session_files(temp_dir, delay_seconds=300) # 300秒 = 5分
+            except Exception as e:
+                logging.error(f"[SSE] Failed to start cleanup timer for {temp_dir}: {e}")
+            # --- ここまで新規追加 ---
+            
             # --- JSON レスポンス: ソートされた結果を返す ---
             results_for_frontend = []
             for res in filtered_results:
