@@ -207,7 +207,7 @@
 
             searchInProgress = true;
             document.getElementById('searchBtn').disabled = true;
-            document.getElementById('cancelBtn').style.display = 'inline-block';
+            //document.getElementById('cancelBtn').style.display = 'inline-block';
             document.getElementById('results').innerHTML = ''; // 結果をクリア
             document.getElementById('downloadSection').style.display = 'none'; // ダウンロードボタンを隠す
             hideStatus();
@@ -240,7 +240,7 @@
                     // 検索完了
                     searchInProgress = false;
                     document.getElementById('searchBtn').disabled = false;
-                    document.getElementById('cancelBtn').style.display = 'none';
+                    //document.getElementById('cancelBtn').style.display = 'none';
                     stopLoading(); // ローディング表示終了
                     eventSource.close(); // SSE 接続を閉じる
 
@@ -254,7 +254,7 @@
                     // エラー発生
                     searchInProgress = false;
                     document.getElementById('searchBtn').disabled = false;
-                    document.getElementById('cancelBtn').style.display = 'none';
+                    //document.getElementById('cancelBtn').style.display = 'none';
                     stopLoading();
                     eventSource.close();
                     showStatus(data.message, 'error');
@@ -265,7 +265,7 @@
                 console.error("EventSource failed:", err);
                 searchInProgress = false;
                 document.getElementById('searchBtn').disabled = false;
-                document.getElementById('cancelBtn').style.display = 'none';
+                //document.getElementById('cancelBtn').style.display = 'none';
                 stopLoading();
                 if (eventSource.readyState === EventSource.CLOSED) {
                      showStatus('検索が中断されました。', 'error');
@@ -293,7 +293,7 @@
                         eventSource = null;
                     }
                     document.getElementById('searchBtn').disabled = false;
-                    document.getElementById('cancelBtn').style.display = 'none';
+                    //document.getElementById('cancelBtn').style.display = 'none';
                     stopLoading();
                     showStatus('検索がキャンセルされました。', 'info');
                 })
@@ -306,7 +306,7 @@
                         eventSource = null;
                     }
                     document.getElementById('searchBtn').disabled = false;
-                    document.getElementById('cancelBtn').style.display = 'none';
+                    //document.getElementById('cancelBtn').style.display = 'none';
                     stopLoading();
                     showStatus('キャンセル処理中にエラーが発生しました。', 'error');
                 });
