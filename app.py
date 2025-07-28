@@ -154,7 +154,7 @@ def scrape_video_details(video_id, base_url='https://www.youtube.com/watch?v='):
 
         html = response.read()
         html_strings = html.decode('utf-8', errors='ignore') # エンコードエラー対策
-        # del(html) # Python では不要
+        del(html) # Python では不要
 
         # """ extract json data """
         json_strings = ""
@@ -168,7 +168,7 @@ def scrape_video_details(video_id, base_url='https://www.youtube.com/watch?v='):
                      end = end_match.end() - 1 # ';' の位置を終端とする
                      json_strings = str(script_tag)[start:end]
                      break
-        # del(soup) # Python では不要
+        del(soup) # Python では不要
 
         if not json_strings:
              logging.warning(f"Failed to extract JSON data for video {video_id}.")
@@ -379,7 +379,7 @@ def search_sse():
             BASEURL = 'https://www.youtube.com/watch?v='
 
             # --- 重要: 処理する動画数の上限を引き上げ ---
-            MAX_VIDEOS_TO_PROCESS = 5000 # 例として100に増やす
+            MAX_VIDEOS_TO_PROCESS = 1000 # 例として100に増やす
             processed_count = 0
             index = 0
             total_ids_to_process = len(all_videoIds) # 初期リストの長さ
@@ -392,7 +392,7 @@ def search_sse():
                 processed_count += 1
 
                 # 進捗表示 (例: 2件ごと、または最後)
-                if processed_count % 2 == 0 or index >= len(all_videoIds) or processed_count >= MAX_VIDEOS_TO_PROCESS:
+                if processed_count % 1 == 0 or index >= len(all_videoIds) or processed_count >= MAX_VIDEOS_TO_PROCESS:
                      #yield f"data: {json.dumps({'type': 'progress', 'message': f'動画情報を取得中... ({processed_count}/{min(total_ids_to_process, MAX_VIDEOS_TO_PROCESS)}) ID: {video_id}'})}\n\n"
                      yield f"data: {json.dumps({'type': 'progress', 'message': f'動画情報を取得中... ({processed_count}/{min(len(all_videoIds), MAX_VIDEOS_TO_PROCESS)}) ID: {video_id}'})}\n\n"
 
@@ -405,9 +405,9 @@ def search_sse():
                 logging.info(f"[SSE] Processing video {processed_count}/{MAX_VIDEOS_TO_PROCESS} (List index {index-1}/{len(all_videoIds)}): {video_id}")
 
                 # 個別動画ページから詳細情報を取得
-                if index > 200:
+                if index > 100:
                     time.sleep(1)
-                elif index < 200:
+                elif index < 100:
                     time.sleep(0.5)    
                 
                 video_details = scrape_video_details(video_id)
