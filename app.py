@@ -450,9 +450,9 @@ def search_sse():
 
                 # 個別動画ページから詳細情報を取得
                 if index > 100:
-                    time.sleep(random.uniform(1, 3))
+                    time.sleep(random.uniform(2, 4))
                 elif index < 100:
-                    time.sleep(random.uniform(1, 3))
+                    time.sleep(random.uniform(2, 3))
                 
                 video_details = scrape_video_details(video_id)
                 if not video_details:
