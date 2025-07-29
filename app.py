@@ -451,7 +451,7 @@ def search_sse():
                 if index > 100:
                     time.sleep(1)
                 elif index < 100:
-                    time.sleep(0.5)    
+                    time.sleep(1)    
                 
                 video_details = scrape_video_details(video_id)
                 if not video_details:
