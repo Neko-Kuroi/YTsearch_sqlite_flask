@@ -16,6 +16,7 @@ from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker
 import socket
 import ssl
+import random
 
 app = Flask(__name__)
 app.secret_key = secrets.token_urlsafe(32)
@@ -449,9 +450,9 @@ def search_sse():
 
                 # 個別動画ページから詳細情報を取得
                 if index > 100:
-                    time.sleep(1)
+                    time.sleep(random.uniform(1, 3))
                 elif index < 100:
-                    time.sleep(1)    
+                    time.sleep(random.uniform(1, 3))
                 
                 video_details = scrape_video_details(video_id)
                 if not video_details:
