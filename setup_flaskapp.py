@@ -167,9 +167,18 @@ def setup_cloudflare_tunnel():
     """Cloudflare Tunnelの設定"""
     print("☁️ Cloudflare Tunnel をセットアップしています...")
 
-    # cloudflaredのダウンロードとインストール
+    # cloudflaredのダウンロードとインストール（エラーを隠さず表示する）
     os.system('sudo wget -nc https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb')
-    os.system('sudo dpkg -i cloudflared-linux-amd64.deb 2>/dev/null')
+    os.system('sudo dpkg -i cloudflared-linux-amd64.deb || sudo apt-get install -f -y')
+
+    # cloudflaredが実際にインストールされたか確認
+    check = subprocess.run(['which', 'cloudflared'], capture_output=True, text=True)
+    if not check.stdout.strip():
+        print("❌ cloudflaredのインストールに失敗しました。上記のdpkg/aptログを確認してください。")
+    else:
+        print(f"✅ cloudflaredインストール確認: {check.stdout.strip()}")
+        version = subprocess.run(['cloudflared', '--version'], capture_output=True, text=True)
+        print(f"   バージョン: {version.stdout.strip()}")
 
     # flaskアプリケーションをバックグラウンドで起動
     # stdoutとstderrをsubprocess.PIPEにリダイレクトしない
@@ -195,11 +204,13 @@ def setup_cloudflare_tunnel():
 
     # Cloudflareトンネルの起動
     print("�� Cloudflare トンネルを開始しています...")
-    tunnel_process = subprocess.Popen(['cloudflared', 'tunnel', '--url', 'http://localhost:5000'],
-                                     stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE,
-                                     text=True,
-                                     bufsize=1)
+    tunnel_process = subprocess.Popen(
+        ['cloudflared', 'tunnel', '--url', 'http://localhost:5000',
+         '--protocol', 'http2', '--loglevel', 'info'],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1)
 
     # Cloudflare Tunnelプロセスの出力を読み取るスレッドは削除
     # tunnel_stdout_thread = threading.Thread(target=read_process_output, args=(tunnel_process, tunnel_process.stdout, "[CF_OUT] "))
@@ -219,7 +230,7 @@ def setup_cloudflare_tunnel():
     while time.time() - start_time < timeout:
         line = tunnel_process.stderr.readline() # Cloudflare TunnelはstderrにURLを出す傾向がある
         if line:
-            # print(f"Cloudflare Tunnel stderr: {line.strip()}") # デバッグ出力は削除
+            print(f"[CF] {line.strip()}")  # 全行表示してエラー内容を可視化
             if 'https://' in line and 'trycloudflare.com' in line:
                 match = re.search(r'(https:\/\/[^\s]+\.trycloudflare\.com)', line)
                 if match:
@@ -237,19 +248,19 @@ def setup_cloudflare_tunnel():
         print(f"✅ Cloudflare トンネルが開始されました: {url}")
         display(HTML(f'<a href="{url}" target="_blank" style="font-size:18px; color:pink;">ファイルアップロードサービスにアクセス: {url}</a>'))
     else:
-        print("⚠️ CloudflareトンネルURLの取得に失敗しました。")
-        # Cloudflare Tunnelプロセスの標準出力と標準エラー出力の表示は削除
-        # print("Cloudflare Tunnelプロセスの標準出力と標準エラー出力を確認してください。")
-        # final_stdout = tunnel_process.stdout.read()
-        # final_stderr = tunnel_process.stderr.read()
-        # if final_stdout:
-        #     print(f"最終的なCloudflare Tunnel stdout: \n{final_stdout.strip()}")
-        # if final_stderr:
-        #     print(f"最終的なCloudflare Tunnel stderr: \n{final_stderr.strip()}")
-
-        # スレッドのjoinも不要
-        # tunnel_stdout_thread.join(timeout=5)
-        # tunnel_stderr_thread.join(timeout=5)
+        print("⚠️ CloudflareトンネルURLの取得に失敗しました。残りのログ:")
+        try:
+            remaining_err = tunnel_process.stderr.read()
+            if remaining_err:
+                print(f"[CF stderr]\n{remaining_err.strip()}")
+        except Exception as e:
+            print(f"stderr読み取りエラー: {e}")
+        try:
+            remaining_out = tunnel_process.stdout.read()
+            if remaining_out:
+                print(f"[CF stdout]\n{remaining_out.strip()}")
+        except Exception as e:
+            print(f"stdout読み取りエラー: {e}")
 
 
     return flask_process, tunnel_process
